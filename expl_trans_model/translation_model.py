@@ -57,6 +57,7 @@ class TranslationModel:
         if inp.input_ids.shape[-1] > 512:
             # TODO what to do here?
             raise NotImplemented()
+        inp = {k : v.to(self.trans_model.device) for k, v in inp.items()}
         out = self.trans_model.generate(**inp, max_length=max_length)
         out_seq = self.trans_tokenizer.batch_decode(out, skip_special_tokens=True)
         return out_seq
@@ -74,3 +75,10 @@ class TranslationModel:
         pred_word_pos = self.mapping_model(word_pos, token2word, word2token, *tokens.values(), *trans_tokens.values())
         
         return [list(elem) for elem in pred_word_pos]
+
+    def to(self, device):
+        """
+        Move models to given device
+        """
+        self.trans_model.to(device)
+        self.mapping_model.to(device)

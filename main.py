@@ -1,5 +1,6 @@
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+import torch
 from fastapi import FastAPI, HTTPException, Body
 from pydantic import BaseModel, Field
 from typing import List
@@ -11,7 +12,10 @@ app = FastAPI(
     version='0.0.1'
 )
 
+device = torch.cuda.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
+
 model = TranslationModel()
+model.to(device)
 
 class Sentences(BaseModel):
     sentences : List[str] = Body(..., example=['Dieser Test ist ganz toll.'])
@@ -33,9 +37,7 @@ class Sentences(BaseModel):
 async def translate(
     sentences : List[str] = Body(..., example=['Dieser Test ist ganz toll.'])
     ):
-    out = model.translate(sentences)
-    print(out)
-    return out
+    return model.translate(sentences)
 
 
 

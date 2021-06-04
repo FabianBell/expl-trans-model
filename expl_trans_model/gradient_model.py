@@ -6,11 +6,6 @@ import torch
 class GradientModel:
 
     def __init__(self):
-        #trans_model_name = 'facebook/wmt19-de-en'
-        #self.tokenizer = FSMTTokenizer.from_pretrained(trans_model_name)
-        #self.model = FirstDerivativeGradientFairseq()
-        #self.embeddings_layer = self.model.embedding_layer
-        
         trans_model_name = 'Helsinki-NLP/opus-mt-de-en'
         self.tokenizer = MarianTokenizer.from_pretrained(trans_model_name)
         self.model = MarianMTModel.from_pretrained(trans_model_name, return_dict=True)
@@ -18,10 +13,14 @@ class GradientModel:
         self.scale = self.model.model.encoder.embed_scale
         self.model.eval()
 
-        #self.en_model = spacy.load("en_core_web_trf")
-        #self.de_model = spacy.load("de_dep_news_trf")
+    def to(self, device):
+        """
+        Move model to device
+        """
+        self.model.to(device)
+        self.embeddings_layer.to(device)
 
-    def map_tokens(self, inp_ids, inp_mask, out_ids, out_mask, token_positions):
+    def _map_tokens(self, inp_ids, inp_mask, out_ids, out_mask, token_positions):
         """
         Maps the tokens by finding the token with the 
         largest first-derivative saliency
@@ -49,14 +48,15 @@ class GradientModel:
                 out_pos[-1].append(pred_pos)
         return out_pos
     
-    def __call__(self, word_positions, token_word_mapping, word_token_mapping, token_ids, token_mask, trans_token_ids, trans_token_mask):
+    def __call__(self, word_positions, token_word_mapping, word_token_mapping, *args):
+        token_ids, token_mask, trans_token_ids, trans_token_mask = [elem.to(self.model.device) for elem in args]
         token_pos = []
         for i, row in enumerate(word_positions):
             token_pos.append([])
             for word_pos in row:
                 for pos in word_token_mapping[i][word_pos]:
                     token_pos[-1].append(pos)
-
-        mapped = self.map_tokens(token_ids, token_mask, trans_token_ids, trans_token_mask, token_pos)
+        
+        mapped = self._map_tokens(token_ids, token_mask, trans_token_ids, trans_token_mask, token_pos)
         words = [set([token_word_mapping[i][pos] for pos in token_pos]) for i, token_pos in enumerate(mapped)]
         return words
