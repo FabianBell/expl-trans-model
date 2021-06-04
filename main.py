@@ -17,14 +17,12 @@ device = torch.cuda.device('cuda:0') if torch.cuda.is_available() else torch.dev
 model = TranslationModel()
 model.to(device)
 
-class Sentences(BaseModel):
-    sentences : List[str] = Body(..., example=['Dieser Test ist ganz toll.'])
-
 @app.post(
     '/translate/', 
     summary='Translates the given sentences.',
     response_model=List[str],
     responses={
+        400 : {'description' : 'Invalid input format.'},
         200 : {
             'content' : {
                 'application/json' : {
@@ -37,6 +35,8 @@ class Sentences(BaseModel):
 async def translate(
     sentences : List[str] = Body(..., example=['Dieser Test ist ganz toll.'])
     ):
+    if len(sentences) == 0:
+        raise HTTPException(status_code=400, detail='No sentences given.')
     return model.translate(sentences)
 
 
@@ -63,10 +63,15 @@ class Entry(BaseModel):
     }
 )
 async def backward(entry : Entry):
-    if len(entry.sentences) != len(entry.trans_sentences) != len(entry.positions):
+    if len(entry.sentences) == 0 or len(entry.trans_sentences) == 0 or len(entry.positions) == 0:
+        raise HTTPException(status_code=400, detail='No sentences given.')
+    if not len(entry.sentences) == len(entry.trans_sentences) == len(entry.positions):
         raise HTTPException(status_code=400, detail='All parameters must have the same batch dimension.')
-    elif any([any([len(elem) != 2 for elem in pos]) for pos in entry.positions]):
-        raise HTTPException(status_code=400, detail='Invalid position structure.')
-    elif any([any([l < 0 or r < 0 or l == r or l >= len(entry.trans_sentences[i]) or r >= len(entry.trans_sentences[i]) for l, r in pos]) for i, pos in enumerate(entry.positions)]):
+    if any([any([len(elem) != 2 for elem in pos]) for pos in entry.positions]):
+        raise HTTPException(status_code=400, detail='Invalid positions structure.')
+    if any([any([l < 0 or r < 0 or l == r or l >= len(entry.trans_sentences[i]) or r >= len(entry.trans_sentences[i]) for l, r in pos]) for i, pos in enumerate(entry.positions)]):
         raise HTTPException(status_code=400, detail='Invalid or out of range character positions')
+    # TODO fix
+    if len(entry.sentences) != 1:
+        raise HTTPException(status_code=400, detail='Not Implemented')
     return model.backward(entry.sentences, entry.trans_sentences, entry.positions)
