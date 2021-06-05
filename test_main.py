@@ -19,7 +19,6 @@ def test_translate_error():
     assert response.status_code == 400
     assert response.json()['detail'] == 'No sentences given.'
 
-"""
 def test_backward_normal():
     response = client.post(
         '/backward/',
@@ -31,20 +30,6 @@ def test_backward_normal():
     )
     assert response.status_code == 200
     assert response.json() == [[1, 4], [1, 4]]
-"""
-
-def test_backward_normal():
-    response = client.post(
-        '/backward/',
-        json={
-            "sentences": ["Dieser Test ist ganz toll."],
-            "trans_sentences": ["This is a great test."],
-            "positions": [[[10, 15], [16, 20]]]
-        }
-    )
-    assert response.status_code == 200
-    assert response.json() == [[1, 4]]
-
 
 def test_backward_error():
     response = client.post(

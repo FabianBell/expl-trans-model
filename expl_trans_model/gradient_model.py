@@ -20,33 +20,43 @@ class GradientModel:
         self.model.to(device)
         self.embeddings_layer.to(device)
 
-    def _map_tokens(self, inp_ids, inp_mask, out_ids, out_mask, token_positions):
+    def _map_tokens(self, inp_ids_batch, inp_mask_batch, out_ids_batch, out_mask_batch, token_positions_batch):
         """
         Maps the tokens by finding the token with the 
         largest first-derivative saliency
         """
-        embeddings = self.embeddings_layer(inp_ids) * self.scale
-        embeddings = embeddings.detach()  # drop graph 
-        embeddings.requires_grad = True
-       
-        labels = out_ids.clone()
-        labels[out_mask == 0] = -100
-        logits = self.model(inputs_embeds=embeddings, attention_mask=inp_mask, labels=out_ids).logits
-        graph = logits.sum(dim=-1)
-       
-        eos_pos = inp_mask.ne(0).min(-1)[1] - 1
+        # TODO allow proper batch computations
+        all_out_pos = []
+        for i in range(len(inp_ids_batch)):
+            inp_ids = inp_ids_batch[[i]]
+            inp_mask = inp_mask_batch[[i]]
+            out_ids = out_ids_batch[[i]]
+            out_mask = out_mask_batch[[i]]
+            token_positions = [token_positions_batch[i]]
+            
+            embeddings = self.embeddings_layer(inp_ids) * self.scale
+            embeddings = embeddings.detach()  # drop graph 
+            embeddings.requires_grad = True
+           
+            labels = out_ids.clone()
+            labels[out_mask == 0] = -100
+            logits = self.model(inputs_embeds=embeddings, attention_mask=inp_mask, labels=out_ids).logits
+            graph = logits.sum(dim=-1)
 
-        out_pos = []
-        for i, token_pos in enumerate(token_positions):
-            out_pos.append([])
-            for pos in token_pos:
-                embeddings.grad = None  # set gradients to zero
-                graph[i, pos].backward(retain_graph=True)
-                # ignore eos token embeddings
-                grad = embeddings.grad[0, :eos_pos[i], :]
-                pred_pos = grad.pow(2).sum(dim=-1).sqrt().argmax(-1).item()
-                out_pos[-1].append(pred_pos)
-        return out_pos
+            eos_pos = inp_mask.ne(0).min(-1)[1] - 1
+
+            out_pos = []
+            for i, token_pos in enumerate(token_positions):
+                out_pos.append([])
+                for pos in token_pos:
+                    embeddings.grad = None  # set gradients to zero
+                    graph[i, pos].backward(retain_graph=True)
+                    # ignore eos token embeddings
+                    grad = embeddings.grad[0, :eos_pos[i], :]
+                    pred_pos = grad.pow(2).sum(dim=-1).sqrt().argmax(-1).item()
+                    out_pos[-1].append(pred_pos)
+            all_out_pos.extend(out_pos)
+        return all_out_pos
     
     def __call__(self, word_positions, token_word_mapping, word_token_mapping, *args):
         token_ids, token_mask, trans_token_ids, trans_token_mask = [elem.to(self.model.device) for elem in args]

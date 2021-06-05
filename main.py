@@ -71,7 +71,4 @@ async def backward(entry : Entry):
         raise HTTPException(status_code=400, detail='Invalid positions structure.')
     if any([any([l < 0 or r < 0 or l == r or l >= len(entry.trans_sentences[i]) or r >= len(entry.trans_sentences[i]) for l, r in pos]) for i, pos in enumerate(entry.positions)]):
         raise HTTPException(status_code=400, detail='Invalid or out of range character positions')
-    # TODO fix
-    if len(entry.sentences) != 1:
-        raise HTTPException(status_code=400, detail='Not Implemented')
     return model.backward(entry.sentences, entry.trans_sentences, entry.positions)
