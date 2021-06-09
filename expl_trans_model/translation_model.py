@@ -1,5 +1,6 @@
 from transformers import FSMTTokenizer, FSMTForConditionalGeneration, MarianTokenizer, MarianMTModel
 import torch
+from typing import List
 from .gradient_model import GradientModel 
 
 class TranslationModel:
@@ -25,7 +26,6 @@ class TranslationModel:
                     word_pos[i].append(j)
             char_pos += len(word) + 1
         assert all([len(elem) != 0 for elem in word_pos])
-        word_pos = [word for words in word_pos for word in words]
         return word_pos
 
     def _get_word_pos_batch(self, sentences, positions):
@@ -62,12 +62,12 @@ class TranslationModel:
         out_seq = self.trans_tokenizer.batch_decode(out, skip_special_tokens=True)
         return out_seq
         
-    def _backward(self, sentences, trans_sentences, char_positions):
+    def _backward(self, sentences: List[str], trans_sentences: List[str], char_positions: List[List[List[int]]]):
         tokens = self.mapping_model.tokenizer(sentences, padding=True, return_tensors='pt')
         trans_tokens = self.mapping_model.tokenizer(trans_sentences, padding=True, return_tensors='pt')
         if tokens.input_ids.shape[-1] > 512 or trans_tokens.input_ids.shape[-1] > 512:
             # TODO what to do here?
-            raise NotImplemented()
+            raise NotImplementedError
 
         word2token = self._get_word2token_batch(trans_sentences)
         token2word = self._get_token2word_batch(sentences)

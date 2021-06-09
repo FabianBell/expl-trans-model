@@ -71,4 +71,7 @@ async def backward(entry : Entry):
         raise HTTPException(status_code=400, detail='Invalid positions structure.')
     if any([any([l < 0 or r < 0 or l == r or l >= len(entry.trans_sentences[i]) or r >= len(entry.trans_sentences[i]) for l, r in pos]) for i, pos in enumerate(entry.positions)]):
         raise HTTPException(status_code=400, detail='Invalid or out of range character positions')
-    return model.backward(entry.sentences, entry.trans_sentences, entry.positions)
+    # join the mappings since we do not care about the exact relation ship
+    out = model.backward(entry.sentences, entry.trans_sentences, entry.positions)
+    out = [list(set([elem for mapping in row for elem in mapping])) for row in out]
+    return out

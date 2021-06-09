@@ -1,0 +1,6 @@
+services:
+  expltransapi:
+    image: docker.siemens.com/fabian.bell.ext/expltransapi/api:latest
+    ports:
+      - "80:80"
+    restart: unless-stopped

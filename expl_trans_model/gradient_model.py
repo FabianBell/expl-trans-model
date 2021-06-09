@@ -2,6 +2,7 @@
 from transformers import FSMTTokenizer
 from transformers import MarianMTModel, MarianTokenizer
 import torch
+from typing import List
 
 class GradientModel:
 
@@ -32,7 +33,7 @@ class GradientModel:
             inp_mask = inp_mask_batch[[i]]
             out_ids = out_ids_batch[[i]]
             out_mask = out_mask_batch[[i]]
-            token_positions = [token_positions_batch[i]]
+            token_positions = token_positions_batch[i]
             
             embeddings = self.embeddings_layer(inp_ids) * self.scale
             embeddings = embeddings.detach()  # drop graph 
@@ -46,27 +47,29 @@ class GradientModel:
             eos_pos = inp_mask.ne(0).min(-1)[1] - 1
 
             out_pos = []
-            for i, token_pos in enumerate(token_positions):
+            for entry in token_positions:
                 out_pos.append([])
-                for pos in token_pos:
+                for pos in entry:
                     embeddings.grad = None  # set gradients to zero
-                    graph[i, pos].backward(retain_graph=True)
+                    #graph[i, pos].backward(retain_graph=True)
+                    graph[0, pos].backward(retain_graph=True)
                     # ignore eos token embeddings
-                    grad = embeddings.grad[0, :eos_pos[i], :]
+                    #grad = embeddings.grad[0, :eos_pos[i], :]
+                    grad = embeddings.grad[0, :eos_pos[0], :]
                     pred_pos = grad.pow(2).sum(dim=-1).sqrt().argmax(-1).item()
                     out_pos[-1].append(pred_pos)
-            all_out_pos.extend(out_pos)
+            all_out_pos.append(out_pos)
         return all_out_pos
     
-    def __call__(self, word_positions, token_word_mapping, word_token_mapping, *args):
+    def __call__(self, word_positions: List[List[int]], token_word_mapping: List[int], word_token_mapping: List[List[int]], *args):
         token_ids, token_mask, trans_token_ids, trans_token_mask = [elem.to(self.model.device) for elem in args]
         token_pos = []
         for i, row in enumerate(word_positions):
             token_pos.append([])
             for word_pos in row:
-                for pos in word_token_mapping[i][word_pos]:
-                    token_pos[-1].append(pos)
-        
+                token_pos[-1].append([])
+                for word in word_pos:
+                    token_pos[-1][-1].extend(word_token_mapping[i][word])
         mapped = self._map_tokens(token_ids, token_mask, trans_token_ids, trans_token_mask, token_pos)
-        words = [set([token_word_mapping[i][pos] for pos in token_pos]) for i, token_pos in enumerate(mapped)]
+        words = [[list(set([token_word_mapping[i][pos] for pos in token_pos])) for token_pos in row] for i, row in enumerate(mapped)]
         return words
