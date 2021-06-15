@@ -12,7 +12,7 @@ app = FastAPI(
     version='0.0.1'
 )
 
-device = torch.cuda.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
+device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
 
 model = TranslationModel()
 model.to(device)
