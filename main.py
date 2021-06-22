@@ -5,6 +5,7 @@ from fastapi import FastAPI, HTTPException, Body
 from pydantic import BaseModel, Field
 from typing import List
 from expl_trans_model.translation_model import TranslationModel
+import json
 
 app = FastAPI(
     title='Explainable Translation API',
@@ -12,10 +13,34 @@ app = FastAPI(
     version='0.0.1'
 )
 
-device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
+with open('config.json', 'rb') as fin:
+    config = json.load(fin)
+
+print(f'Use config: {config}')
+
+if config['use_gpu'] is True:
+    if torch.cuda.is_available():
+        device = torch.device('cuda:0') 
+    else:
+        raise Exception('GPU required but no GPU found.')
+else:
+    device = torch.device('cpu')
 
 model = TranslationModel()
 model.to(device)
+
+def batch_loader(data):
+    """
+    Splits the data into bacthes. The last batch might have a smaller size.
+    """
+    batch = []
+    for entry in data:
+        batch.append(entry)
+        if len(batch) == config['batch_size']:
+            yield batch
+            batch = []
+    if len(batch) != 0:
+        yield batch
 
 @app.post(
     '/translate/', 
@@ -37,9 +62,7 @@ async def translate(
     ):
     if len(sentences) == 0:
         raise HTTPException(status_code=400, detail='No sentences given.')
-    return model.translate(sentences)
-
-
+    return [result for batch in batch_loader(sentences) for result in model.translate(batch)]
 
 
 class Entry(BaseModel):
