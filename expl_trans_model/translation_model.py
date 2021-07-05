@@ -61,7 +61,25 @@ class TranslationModel:
         out = self.trans_model.generate(**inp, max_length=max_length)
         out_seq = self.trans_tokenizer.batch_decode(out, skip_special_tokens=True)
         return out_seq
+    
+    def _get_char_sequences(self, sentences, positions):
+        word_ranges = []
+        for sentence in sentences:
+            word_ranges.append([])
+            pos = 0
+            for word in sentence.split():
+                word_ranges[-1].append((pos, pos+len(word)))
+                pos += len(word) + 1
+        results = []
+        for i, batch in enumerate(positions):
+            results.append([])
+            for match in batch:
+                results[-1].append([])
+                for word_pos in match:
+                    results[-1][-1].append(word_ranges[i][word_pos])
+        return results
         
+
     def _backward(self, sentences: List[str], trans_sentences: List[str], char_positions: List[List[List[int]]]):
         tokens = self.mapping_model.tokenizer(sentences, padding=True, return_tensors='pt')
         trans_tokens = self.mapping_model.tokenizer(trans_sentences, padding=True, return_tensors='pt')
@@ -74,7 +92,10 @@ class TranslationModel:
         word_pos = self._get_word_pos_batch(trans_sentences, char_positions)
         pred_word_pos = self.mapping_model(word_pos, token2word, word2token, *tokens.values(), *trans_tokens.values())
         
-        return [list(elem) for elem in pred_word_pos]
+        words = [list(elem) for elem in pred_word_pos]
+        char_seq = self._get_char_sequences(sentences, words)
+        return char_seq
+        
 
     def to(self, device):
         """

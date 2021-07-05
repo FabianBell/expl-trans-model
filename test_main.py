@@ -27,11 +27,11 @@ def test_backward_normal():
         json={
             "sentences": ["Dieser Test ist ganz toll.", "Dieser Test ist ganz toll."],
             "trans_sentences": ["This is a great test.", "This is a great test."],
-            "positions": [[[10, 15], [16, 20]], [[10, 15], [16, 20]]]
+            "positions": [[(10, 15), (16, 20)], [(10, 15), (16, 20)]]
         }
     )
     assert response.status_code == 200
-    assert response.json() == [[1, 4], [1, 4]]
+    assert response.json() == [[[21, 26], [7, 11]], [[21, 26], [7, 11]]]
 
 def test_backward_error():
     response = client.post(
@@ -39,7 +39,7 @@ def test_backward_error():
         json={
             "sentences": ["Dieser Test ist ganz toll.", "Dieser Test ist ganz toll."],
             "trans_sentences": ["This is a great test."],
-            "positions": [[[10, 15], [16, 20]]]
+            "positions": [[(10, 15), (16, 20)]]
         }
     )
     assert response.status_code == 400
@@ -61,18 +61,17 @@ def test_backward_error():
         json={
             "sentences": ["Dieser Test ist ganz toll."],
             "trans_sentences": ["This is a great test."],
-            "positions": [[[1]]]
+            "positions": [[(1,)]]
         }
     )
-    assert response.status_code == 400
-    assert response.json()['detail'] == 'Invalid positions structure.'
+    assert response.status_code == 422
     
     response = client.post(
         '/backward/',
         json={
             "sentences": ["Dieser Test ist ganz toll."],
             "trans_sentences": ["This is a great test."],
-            "positions": [[[60, 120]]]
+            "positions": [[(60, 120)]]
         }
     )
     assert response.status_code == 400
