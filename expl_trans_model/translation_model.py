@@ -1,17 +1,31 @@
-from transformers import FSMTTokenizer, FSMTForConditionalGeneration, MarianTokenizer, MarianMTModel
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 import torch
 from typing import List
-from .gradient_model import GradientModel 
+import re
+from langdetect import detect
+from .modified_fairseq import Fairseq
 
 class TranslationModel:
 
-    def __init__(self, back_mapping=True):
-        translation_name = 'facebook/wmt19-de-en'
-        self.trans_tokenizer = FSMTTokenizer.from_pretrained(translation_name)
-        self.trans_model = FSMTForConditionalGeneration.from_pretrained(translation_name)
+    def __init__(self, back_mapping=True, translation_name='facebook/wmt19-de-en'):
+        if translation_name.startswith('facebook/wmt19'):
+            self.config = 'fairseq'
+            self.trans_tokenizer = AutoTokenizer.from_pretrained(translation_name)
+        elif translation_name.startswith('facebook/m2m100_418M') and re.fullmatch('facebook/m2m100_418M-[a-zA-Z]{2}', translation_name):
+            self.config = 'm2m100_418M'
+            translation_name, trg_code = translation_name.split('-')
+            self.trans_tokenizer = AutoTokenizer.from_pretrained(translation_name)
+            self.trg_code = self.trans_tokenizer.get_lang_id(trg_code) 
+        else:
+            raise Exception(f'Model {translation_name} not supported')
+        self.trans_model = AutoModelForSeq2SeqLM.from_pretrained(translation_name)
         self.trans_model.eval()
+        self.back_mapping = back_mapping
         if back_mapping is True:
-            self.mapping_model = GradientModel()
+            if self.config == 'fairseq':
+                self.mapping_model = Fairseq(translation_name)
+            else:
+                raise Exception(f'Backward path is not supported for model {translation_name}')
             self.backward = self._backward
         
     def _get_word_pos(self, sent, pos):
@@ -53,12 +67,20 @@ class TranslationModel:
         return [self._get_word2token(seq) for seq in sequences]
 
     def translate(self, sentence, max_length=512):
+        if self.config == 'm2m100_418M':
+            src_lang = detect(sentence[0])
+            if '-' in src_lang:
+                src_lang = src_lang.split('-')[0]
+            self.trans_tokenizer.src_lang = src_lang 
         inp = self.trans_tokenizer(sentence, padding=True, return_tensors='pt')
         if inp.input_ids.shape[-1] > 512:
             # TODO what to do here?
             raise NotImplemented()
         inp = {k : v.to(self.trans_model.device) for k, v in inp.items()}
-        out = self.trans_model.generate(**inp, max_length=max_length)
+        if self.config == 'm2m100_418M':
+            out = self.trans_model.generate(**inp, max_length=max_length, forced_bos_token_id=self.trg_code)
+        else:
+            out = self.trans_model.generate(**inp, max_length=max_length)
         out_seq = self.trans_tokenizer.batch_decode(out, skip_special_tokens=True)
         return out_seq
     
@@ -102,4 +124,5 @@ class TranslationModel:
         Move models to given device
         """
         self.trans_model.to(device)
-        self.mapping_model.to(device)
+        if self.back_mapping is True:
+            self.mapping_model.to(device)

@@ -26,7 +26,10 @@ if config['use_gpu'] is True:
 else:
     device = torch.device('cpu')
 
-model = TranslationModel()
+model = TranslationModel(
+    translation_name=config['model'],
+    back_mapping=config['backward']
+)
 model.to(device)
 
 def batch_loader(data):

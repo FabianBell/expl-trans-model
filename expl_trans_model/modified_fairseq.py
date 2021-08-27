@@ -1,0 +1,36 @@
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+from transformers import FSMTForConditionalGeneration
+import torch
+
+class DecoderNoCacheWrapper(torch.nn.Module):
+    
+    def __init__(self, decoder):
+        super().__init__()
+        self.decoder = decoder
+        # the following is requested by the upper layers
+        self.embed_tokens = self.decoder.embed_tokens
+    
+    def forward(self, *args, use_cache=None, **kwargs):
+        return self.decoder(*args, use_cache=False, **kwargs)
+
+def make_label(tokens):
+    labels = torch.empty_like(tokens)
+    labels[:, 1:] = tokens[:, :-1]
+    labels[:, 0] = tokens[:, -1]
+    mask = (labels != 1).int()
+    return labels, mask
+
+class Fairseq(torch.nn.Module):
+    
+    def __init__(self, name):
+        super().__init__()
+        self.model = FSMTForConditionalGeneration.from_pretrained(name)
+        self.model.model.decoder = DecoderNoCacheWrapper(self.model.model.decoder)
+        
+    def forward(self, input_ids, labels, *args, use_cache=None, decoder_input_ids=None, decoder_attention_mask=None, **kwargs):
+        labels, label_mask = make_label(labels)
+        return self.model(input_ids=input_ids, *args, use_cache=False, decoder_input_ids=labels, decoder_attention_mask=label_mask, **kwargs)
+    
+    def generate(self, *args, **kwargs):
+        return self.model(*args, **kwargs)
