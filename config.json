@@ -1,6 +1,6 @@
 {
     "batch_size" : 10,
     "use_gpu" : false,
-    "model" : "facebook/m2m100_418M-en",
-    "backward" : false
+    "model" : "facebook/wmt19-de-en",
+    "backward" : true
 }

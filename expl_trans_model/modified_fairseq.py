@@ -28,9 +28,9 @@ class Fairseq(torch.nn.Module):
         self.model = FSMTForConditionalGeneration.from_pretrained(name)
         self.model.model.decoder = DecoderNoCacheWrapper(self.model.model.decoder)
         
-    def forward(self, input_ids, labels, *args, use_cache=None, decoder_input_ids=None, decoder_attention_mask=None, **kwargs):
+    def forward(self, input_ids, labels, *args, use_cache=None, decoder_input_ids=None, decoder_attention_mask=None, output_attentions=None, **kwargs):
         labels, label_mask = make_label(labels)
-        return self.model(input_ids=input_ids, *args, use_cache=False, decoder_input_ids=labels, decoder_attention_mask=label_mask, **kwargs)
+        return self.model(input_ids=input_ids, *args, use_cache=False, decoder_input_ids=labels, decoder_attention_mask=label_mask, output_attentions=True, **kwargs)
     
     def generate(self, *args, **kwargs):
         return self.model(*args, **kwargs)
