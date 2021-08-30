@@ -7,23 +7,27 @@ from .modified_fairseq import Fairseq
 
 class TranslationModel:
 
-    def __init__(self, back_mapping=True, translation_name='facebook/wmt19-de-en'):
+    def __init__(self, back_mapping=True, translation_name='facebook/wmt19-de-en', word_level=True):
         if translation_name.startswith('facebook/wmt19'):
             self.config = 'wmt19'
             self.tokenizer = AutoTokenizer.from_pretrained(translation_name)
         elif translation_name.startswith('facebook/m2m100_418M') and re.fullmatch('facebook/m2m100_418M-[a-zA-Z]{2}', translation_name):
             self.config = 'm2m100_418M'
-            translation_name, trg_code = translation_name.split('-')
+            translation_name, trg_code_name = translation_name.split('-')
             self.tokenizer = AutoTokenizer.from_pretrained(translation_name)
-            self.trg_code = self.tokenizer.get_lang_id(trg_code) 
+            self.trg_code_name = trg_code_name
+            self.trg_code = self.tokenizer.get_lang_id(trg_code_name) 
         else:
             raise Exception(f'Model {translation_name} not supported')
         self.trans_model = AutoModelForSeq2SeqLM.from_pretrained(translation_name)
         self.trans_model.eval()
         self.back_mapping = back_mapping
         if back_mapping is True:
+            self.word_level = word_level
             if self.config == 'wmt19':
                 self.mapping_model = Fairseq(translation_name)
+            elif self.config == 'm2m100_418M':
+                self.mapping_model = self.trans_model
             else:
                 raise Exception(f'Backward path is not supported for model {translation_name}')
             self.backward = self._backward
@@ -100,31 +104,72 @@ class TranslationModel:
                 for word_pos in match:
                     results[-1][-1].append(word_ranges[i][word_pos])
         return results
-        
-
-    def attention_alignment_mapping(self, tokens, trans_tokens, token_pos):
-        pass
     
+    def _get_token_pos(self, trans_tokens : List[int], trans_sentence : str, char_positions : List[Tuple[int, int]]) -> List[List[int]]:
+        upper_char_pos = [len(self.tokenizer.decode(trans_tokens[:i], skip_special_tokens=True)) for i in range(1, len(trans_tokens))]
+        char_ranges = [(upper_char_pos[i], upper_char_pos[i+1]) for i in range(len(upper_char_pos) - 1)]
+        token_pos = []
+        for l, r in char_positions:
+            token_pos.append([])
+            for pos, (t, k) in enumerate(char_ranges):
+                if t <= l < k or t < r <= k or (l <= t and k <= r):
+                    token_pos[-1].append(pos)
+                if r <= t:
+                    break
+        return token_pos
+
+    def _get_char_sequences_from_tokens(self, tokens : List[int], pred : List[List[int]]) -> List[List[Tuple[int, int]]]:
+        results : List[List[Tuple[int, int]]] = []
+        for entry in pred:
+            results.append([])
+            for pos in entry:
+                l = len(self.tokenizer.decode(tokens[:pos], skip_special_tokens=True))
+                r = len(self.tokenizer.decode(tokens[:pos+1], skip_special_tokens=True))
+                results[-1].append((l, r))
+        return results
+                
+
+    def _get_char_sequences_from_tokens_batch(self, token_batch : List[List[int]], pred : List[List[List[int]]]) -> List[List[List[Tuple[int, int]]]]:
+        return [self._get_char_sequences_from_tokens(tokens, pred_entry) for tokens, pred_entry in zip(token_batch, pred)]
+        
+    
+    def _get_token_pos_batch(self, trans_token_batch : List[List[int]], trans_sentences : List[str], char_positions : List[List[Tuple[int, int]]]) -> List[List[List[int]]]:
+        return [self._get_token_pos(trans_tokens, trans_sentence, char_position) for trans_tokens, trans_sentence, char_position in zip(trans_token_batch, trans_sentences, char_positions)]
+
     def _backward(self, sentences: List[str], trans_sentences: List[str], char_positions: List[List[List[int]]]) -> List[List[List[Tuple[int, int]]]]:
-        inp = self.tokenizer(sentences, padding=True, return_tensors='pt')
-        trans_tokens = self.tokenizer(trans_sentences, padding=True, return_tensors='pt').input_ids
+        if self.config == 'm2m100_418M':
+            src_lang = detect(sentences[0])
+            if '-' in src_lang:
+                src_lang = src_lang.split('-')[0]
+            self.tokenizer.src_lang = src_lang
+            inp = self.tokenizer(sentences, padding=True, return_tensors='pt')
+            self.tokenizer.src_lang = self.trg_code_name
+            trans_tokens = self.tokenizer(trans_sentences, padding=True, return_tensors='pt').input_ids
+        else:
+            inp = self.tokenizer(sentences, padding=True, return_tensors='pt')
+            trans_tokens = self.tokenizer(trans_sentences, padding=True, return_tensors='pt').input_ids
         if inp.input_ids.shape[-1] > 512 or trans_tokens.shape[-1] > 512:
             # TODO what to do here?
             raise NotImplementedError
 
-        word2token : List[List[List[int]]]= self._get_word2token_batch(trans_sentences)
-        token2word : List[List[int]] = self._get_token2word_batch(sentences)
-        word_pos : List[List[List[int]]] = self._get_word_pos_batch(trans_sentences, char_positions)
-        
-        attentions = self.mapping_model(**inp, labels=trans_tokens).cross_attentions
-        attentions = [attention.unsqueeze(1) for attention in attentions]
-        attentions = torch.cat(attentions, dim=1)[..., :-1, :-1]
-        attentions = attentions[:, -1, ...].sum(dim=1)
-        mapping = attentions.argmax(-1)
+        if self.word_level is True:
+            word2token : List[List[List[int]]]= self._get_word2token_batch(trans_sentences)
+            token2word : List[List[int]] = self._get_token2word_batch(sentences)
+            word_pos : List[List[List[int]]] = self._get_word_pos_batch(trans_sentences, char_positions)
+            key_pos : List[List[List[int]]] = [[[token for word in words for token in word2token[i][word]] for words in entry] for i, entry in enumerate(word_pos)]
+        else:
+            key_pos : List[List[List[int]]] = self._get_token_pos_batch(trans_tokens, trans_sentences, char_positions)
 
-        pred : List[List[List[int]]] = [[list(set([token2word[i][mapping[i, j].item()] for j in pos])) for pos in word_pos_entry] for i, word_pos_entry in enumerate(word_pos)]
+        attentions = self.mapping_model(**inp, labels=trans_tokens, output_attentions=True).cross_attentions
+        mapping = attentions[-2][..., :-1, :-1].sum(dim=1).softmax(-1).argmax(-1)
+
+        pred : List[List[List[int]]] = [[list(set([mapping[i, j].item() for j in pos])) for pos in key_pos_entry] for i, key_pos_entry in enumerate(key_pos)]
         
-        char_seq : List[List[List[Tuple[int, int]]]] = self._get_char_sequences(sentences, pred)
+        if self.word_level is True:
+            pred = [[list(set([token2word[i][j] for j in pos])) for pos in pred_entry] for i, pred_entry in enumerate(pred)]
+            char_seq : List[List[List[Tuple[int, int]]]] = self._get_char_sequences(sentences, pred)
+        else:
+            char_seq : List[List[List[Tuple[int, int]]]] = self._get_char_sequences_from_tokens_batch(inp.input_ids, pred)
         return char_seq
         
 

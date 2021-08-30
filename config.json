@@ -1,6 +1,7 @@
 {
-    "batch_size" : 10,
+    "batch_size" : 1,
     "use_gpu" : false,
     "model" : "facebook/wmt19-de-en",
-    "backward" : true
+    "backward" : true,
+    "word_level" : true
 }

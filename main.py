@@ -28,7 +28,8 @@ else:
 
 model = TranslationModel(
     translation_name=config['model'],
-    back_mapping=config['backward']
+    back_mapping=config['backward'],
+    word_level=config['word_level']
 )
 model.to(device)
 
