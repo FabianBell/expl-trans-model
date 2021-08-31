@@ -1,8 +1,5 @@
-from transformers import FSMTTokenizer, FSMTForConditionalGeneration, MarianTokenizer, MarianMTModel
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
-fstm_name = 'facebook/wmt19-de-en'
-FSMTTokenizer.from_pretrained(fstm_name)
-FSMTForConditionalGeneration.from_pretrained(fstm_name)
-marian_name = 'Helsinki-NLP/opus-mt-de-en'
-MarianTokenizer.from_pretrained(marian_name)
-MarianMTModel.from_pretrained(marian_name)
+model = ['facebook/wmt19-de-en', 'facebook/m2m100_418M']
+[AutoTokenizer.from_pretrained(name) for name in model]
+[AutoModelForSeq2SeqLM.from_pretrained(name) for name in model]
