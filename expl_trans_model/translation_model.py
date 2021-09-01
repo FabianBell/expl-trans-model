@@ -5,6 +5,11 @@ import re
 from langdetect import detect
 from .modified_fairseq import Fairseq
 
+class SequenceTooLongException(Exception):
+
+    def __init__(self):
+        super().__init__('Target or source sequence exceeded the maximum token sequence length of 512 tokens. Did you check the sequences before? (check_length(seq))')
+
 class TranslationModel:
 
     def __init__(self, back_mapping=True, translation_name='facebook/wmt19-de-en', word_level=True):
@@ -78,8 +83,7 @@ class TranslationModel:
             self.tokenizer.src_lang = src_lang 
         inp = self.tokenizer(sentence, padding=True, return_tensors='pt')
         if inp.input_ids.shape[-1] > 512:
-            # TODO what to do here?
-            raise NotImplemented()
+            raise SequenceTooLongException()
         inp = {k : v.to(self.trans_model.device) for k, v in inp.items()}
         if self.config == 'm2m100_418M':
             out = self.trans_model.generate(**inp, max_length=max_length, forced_bos_token_id=self.trg_code)
@@ -136,6 +140,9 @@ class TranslationModel:
     def _get_token_pos_batch(self, trans_token_batch : List[List[int]], trans_sentences : List[str], char_positions : List[List[Tuple[int, int]]]) -> List[List[List[int]]]:
         return [self._get_token_pos(trans_tokens, trans_sentence, char_position) for trans_tokens, trans_sentence, char_position in zip(trans_token_batch, trans_sentences, char_positions)]
 
+    def check_length(self, seq):
+        return len(self.tokenizer(seq).input_ids) <= 512
+
     def _backward(self, sentences: List[str], trans_sentences: List[str], char_positions: List[List[List[int]]]) -> List[List[List[Tuple[int, int]]]]:
         if self.config == 'm2m100_418M':
             src_lang = detect(sentences[0])
@@ -149,8 +156,7 @@ class TranslationModel:
             inp = self.tokenizer(sentences, padding=True, return_tensors='pt')
             trans_tokens = self.tokenizer(trans_sentences, padding=True, return_tensors='pt').input_ids
         if inp.input_ids.shape[-1] > 512 or trans_tokens.shape[-1] > 512:
-            # TODO what to do here?
-            raise NotImplementedError
+            raise SequenceTooLongException()
 
         if self.word_level is True:
             word2token : List[List[List[int]]]= self._get_word2token_batch(trans_sentences)
