@@ -160,9 +160,15 @@ class TranslationModel:
         else:
             key_pos : List[List[List[int]]] = self._get_token_pos_batch(trans_tokens, trans_sentences, char_positions)
 
-        attentions = self.mapping_model(**inp, labels=trans_tokens, output_attentions=True).cross_attentions
-        mapping = attentions[-2][..., :-1, :-1].sum(dim=1).softmax(-1).argmax(-1)
-
+        attentions = self.mapping_model(**inp, labels=trans_tokens, output_attentions=True).cross_attentions[-1]
+        attentions = attentions.sum(dim=1)
+        # ignore eos tokens
+        eos_pos = inp.attention_mask.argmin(-1) - 1
+        attentions[torch.arange(trans_tokens.shape[0]), :, eos_pos] = float('-inf')
+        if self.config == 'm2m100_418M':
+            # ignore first language token
+            attentions[..., 0] = float('-inf')
+        mapping = attentions.softmax(-1).argmax(-1)
         pred : List[List[List[int]]] = [[list(set([mapping[i, j].item() for j in pos])) for pos in key_pos_entry] for i, key_pos_entry in enumerate(key_pos)]
         
         if self.word_level is True:
