@@ -49,7 +49,7 @@ def batch_loader(data):
 @app.post(
     '/translate/', 
     summary='Translates the given sentences.',
-    response_model=List[str],
+    response_model=List[Optional[str]],
     responses={
         400 : {'description' : 'Invalid input format.'},
         200 : {
@@ -66,7 +66,13 @@ async def translate(
     ):
     if len(sentences) == 0:
         raise HTTPException(status_code=400, detail='No sentences given.')
-    return [result for batch in batch_loader(sentences) for result in model.translate(batch)]
+    ignore = [i for i, sentence in enumerate(sentences) if not model.check_length(sentence)]
+    for i in reversed(ignore):
+        sentences.pop(i)
+    results = [result for batch in batch_loader(sentences) for result in model.translate(batch)]
+    for i in ignore:
+        results.insert(i, None)
+    return results
 
 
 class Entry(BaseModel):
