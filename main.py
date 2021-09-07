@@ -116,7 +116,7 @@ async def backward(entry : Entry):
         raise HTTPException(status_code=400, detail='No sentences given.')
     if not len(entry.sentences) == len(entry.trans_sentences) == len(entry.positions):
         raise HTTPException(status_code=400, detail='All parameters must have the same batch dimension.')
-    if any([any([l < 0 or r < 0 or l == r or l >= len(entry.trans_sentences[i]) or r > len(entry.trans_sentences[i]) or l > r for l, r in pos]) for i, pos in enumerate(entry.positions)]):
+    if any([any([l < 0 or r <= 0 or l == r or l >= len(entry.trans_sentences[i]) or r > len(entry.trans_sentences[i]) or l > r for l, r in pos]) for i, pos in enumerate(entry.positions)]):
         raise HTTPException(status_code=400, detail='Invalid or out of range character positions')
     ignore = []
     for i, (sentence, trans_sentence, _) in enumerate(entry):
