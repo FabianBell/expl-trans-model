@@ -29,8 +29,6 @@ else:
 model = TranslationModel(
     translation_name=config['model'],
     back_mapping=config['backward'],
-    word_level=config['word_level'],
-    segmentation=config.get('segmentation')
 )
 model.to(device)
 

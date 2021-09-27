@@ -4,7 +4,10 @@ from transformers import FSMTForConditionalGeneration
 import torch
 
 class DecoderNoCacheWrapper(torch.nn.Module):
-    
+    """
+    Wrapper Module that deactivates the cache for the given decoder.
+    """
+
     def __init__(self, decoder):
         super().__init__()
         self.decoder = decoder
@@ -15,6 +18,9 @@ class DecoderNoCacheWrapper(torch.nn.Module):
         return self.decoder(*args, use_cache=False, **kwargs)
 
 def make_label(tokens):
+    """
+    Transforms given tokens to labels
+    """
     labels = torch.empty_like(tokens)
     labels[:, 1:] = tokens[:, :-1]
     labels[:, 0] = tokens[:, -1]
@@ -22,7 +28,10 @@ def make_label(tokens):
     return labels, mask
 
 class Fairseq(torch.nn.Module):
-    
+    """
+    A modified Fairseq (FSMT) model that properly computes the attention scores.
+    """
+
     def __init__(self, name):
         super().__init__()
         self.model = FSMTForConditionalGeneration.from_pretrained(name)
