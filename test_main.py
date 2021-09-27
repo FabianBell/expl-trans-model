@@ -1,16 +1,19 @@
+from main import app
+from fastapi.testclient import TestClient
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-from fastapi.testclient import TestClient
-from main import app
 
 client = TestClient(app)
+
 
 def test_translate_normal():
     response = client.post(
         '/translate/',
-        json=["Die Bemessungsspannung ist sehr toll.", "Die Komponenten müssen alle gelb sein."]
-    )
+        json=[
+            "Die Bemessungsspannung ist sehr toll.",
+            "Die Komponenten müssen alle gelb sein."])
     assert response.status_code == 200
+
 
 def test_translate_error():
     response = client.post(
@@ -19,6 +22,7 @@ def test_translate_error():
     )
     assert response.status_code == 400
     assert response.json()['detail'] == 'No sentences given.'
+
 
 def test_backward_normal():
     response = client.post(
@@ -31,6 +35,7 @@ def test_backward_normal():
     )
     assert response.status_code == 200
 
+
 def test_backward_error():
     response = client.post(
         '/backward/',
@@ -41,8 +46,9 @@ def test_backward_error():
         }
     )
     assert response.status_code == 400
-    assert response.json()['detail'] == 'All parameters must have the same batch dimension.'
-    
+    assert response.json()[
+        'detail'] == 'All parameters must have the same batch dimension.'
+
     response = client.post(
         '/backward/',
         json={
@@ -63,7 +69,7 @@ def test_backward_error():
         }
     )
     assert response.status_code == 422
-    
+
     response = client.post(
         '/backward/',
         json={
@@ -73,4 +79,5 @@ def test_backward_error():
         }
     )
     assert response.status_code == 400
-    assert response.json()['detail'] == 'Invalid or out of range character positions'
+    assert response.json()[
+        'detail'] == 'Invalid or out of range character positions'
